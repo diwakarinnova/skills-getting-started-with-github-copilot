@@ -7,11 +7,16 @@ document.addEventListener("DOMContentLoaded", () => {
   // Function to fetch activities from API
   async function fetchActivities() {
     try {
+      const selectedActivity = activitySelect.value;
       const response = await fetch("/activities");
       const activities = await response.json();
 
       // Clear loading message
       activitiesList.innerHTML = "";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "-- Select an activity --";
+      activitySelect.replaceChildren(placeholder);
 
       // Populate activities list
       Object.entries(activities).forEach(([name, details]) => {
@@ -27,6 +32,68 @@ document.addEventListener("DOMContentLoaded", () => {
           <p><strong>Availability:</strong> ${spotsLeft} spots left</p>
         `;
 
+        const participantsSection = document.createElement("div");
+        participantsSection.className = "participants-section";
+
+        const participantsHeading = document.createElement("h5");
+        participantsHeading.textContent = "Participants";
+        participantsSection.appendChild(participantsHeading);
+
+        const participantsList = document.createElement("ul");
+        participantsList.className = "participant-list";
+
+        if (details.participants.length > 0) {
+          details.participants.forEach((email) => {
+            const participant = document.createElement("li");
+            participant.className = "participant-item";
+
+            const participantEmail = document.createElement("span");
+            participantEmail.className = "participant-email";
+            participantEmail.textContent = email;
+            participant.appendChild(participantEmail);
+
+            const removeButton = document.createElement("button");
+            removeButton.type = "button";
+            removeButton.className = "participant-remove";
+            removeButton.textContent = "×";
+            removeButton.setAttribute("aria-label", `Remove ${email} from ${name}`);
+            removeButton.addEventListener("click", async () => {
+              removeButton.disabled = true;
+              try {
+                const unregisterResponse = await fetch(
+                  `/activities/${encodeURIComponent(name)}/signup?email=${encodeURIComponent(email)}`,
+                  { method: "DELETE" }
+                );
+                const result = await unregisterResponse.json();
+
+                if (!unregisterResponse.ok) {
+                  throw new Error(result.detail || "Unable to unregister participant");
+                }
+
+                await fetchActivities();
+                messageDiv.textContent = result.message;
+                messageDiv.className = "success";
+                messageDiv.classList.remove("hidden");
+              } catch (error) {
+                messageDiv.textContent = error.message || "Failed to unregister participant";
+                messageDiv.className = "error";
+                messageDiv.classList.remove("hidden");
+                removeButton.disabled = false;
+              }
+            });
+            participant.appendChild(removeButton);
+            participantsList.appendChild(participant);
+          });
+        } else {
+          const emptyMessage = document.createElement("li");
+          emptyMessage.className = "empty-participants";
+          emptyMessage.textContent = "No participants yet";
+          participantsList.appendChild(emptyMessage);
+        }
+
+        participantsSection.appendChild(participantsList);
+        activityCard.appendChild(participantsSection);
+
         activitiesList.appendChild(activityCard);
 
         // Add option to select dropdown
@@ -35,6 +102,7 @@ document.addEventListener("DOMContentLoaded", () => {
         option.textContent = name;
         activitySelect.appendChild(option);
       });
+      activitySelect.value = selectedActivity;
     } catch (error) {
       activitiesList.innerHTML = "<p>Failed to load activities. Please try again later.</p>";
       console.error("Error fetching activities:", error);
@@ -59,6 +127,7 @@ document.addEventListener("DOMContentLoaded", () => {
       const result = await response.json();
 
       if (response.ok) {
+        await fetchActivities();
         messageDiv.textContent = result.message;
         messageDiv.className = "success";
         signupForm.reset();
